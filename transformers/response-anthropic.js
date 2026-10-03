@@ -7,6 +7,9 @@ export class AnthropicResponseTransformer {
     this.created = Math.floor(Date.now() / 1000);
     this.messageId = null;
     this.currentIndex = 0;
+    this.toolCallCount = 0;
+    // Anthropic content block index -> OpenAI tool_calls index
+    this.blockToToolIndex = new Map();
   }
 
   parseSSELine(line) {
@@ -33,12 +36,29 @@ export class AnthropicResponseTransformer {
     }
 
     if (eventType === 'content_block_start') {
+      const block = eventData.content_block;
+      if (block?.type === 'tool_use') {
+        const toolIndex = this.toolCallCount++;
+        this.blockToToolIndex.set(eventData.index, toolIndex);
+        return this.createToolCallChunk(toolIndex, block.id, block.name, '');
+      }
       return null;
     }
 
     if (eventType === 'content_block_delta') {
-      const text = eventData.delta?.text || '';
-      return this.createOpenAIChunk(text, null, false);
+      const delta = eventData.delta || {};
+
+      if (delta.type === 'input_json_delta') {
+        const toolIndex = this.blockToToolIndex.get(eventData.index) ?? 0;
+        return this.createToolCallChunk(toolIndex, null, null, delta.partial_json || '');
+      }
+
+      if (delta.type === 'text_delta' || typeof delta.text === 'string') {
+        return this.createOpenAIChunk(delta.text || '', null, false);
+      }
+
+      // thinking / signature and other delta types have no OpenAI chat.completions equivalent
+      return null;
     }
 
     if (eventType === 'content_block_stop') {
@@ -85,6 +105,35 @@ export class AnthropicResponseTransformer {
     if (content) {
       chunk.choices[0].delta.content = content;
     }
+
+    return `data: ${JSON.stringify(chunk)}\n\n`;
+  }
+
+  createToolCallChunk(index, id, name, args) {
+    const toolCall = { index, type: 'function', function: {} };
+    if (id) {
+      toolCall.id = id;
+    }
+    if (name) {
+      toolCall.function.name = name;
+    }
+    if (args) {
+      toolCall.function.arguments = args;
+    }
+
+    const chunk = {
+      id: this.requestId,
+      object: 'chat.completion.chunk',
+      created: this.created,
+      model: this.model,
+      choices: [
+        {
+          index: 0,
+          delta: { tool_calls: [toolCall] },
+          finish_reason: null
+        }
+      ]
+    };
 
     return `data: ${JSON.stringify(chunk)}\n\n`;
   }

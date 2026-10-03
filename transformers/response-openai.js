@@ -5,6 +5,10 @@ export class OpenAIResponseTransformer {
     this.model = model;
     this.requestId = requestId || `chatcmpl-${Date.now()}`;
     this.created = Math.floor(Date.now() / 1000);
+    this.hasToolCalls = false;
+    this.toolCallCount = 0;
+    // Responses output item id -> OpenAI tool_calls index
+    this.itemToToolIndex = new Map();
   }
 
   parseSSELine(line) {
@@ -42,12 +46,37 @@ export class OpenAIResponseTransformer {
       return null;
     }
 
+    if (eventType === 'response.output_item.added') {
+      const item = eventData.item;
+      if (item?.type === 'function_call') {
+        const toolIndex = this.toolCallCount++;
+        this.hasToolCalls = true;
+        if (item.id) {
+          this.itemToToolIndex.set(item.id, toolIndex);
+        }
+        return this.createToolCallChunk(toolIndex, item.call_id || item.id, item.name, '');
+      }
+      return null;
+    }
+
+    if (eventType === 'response.function_call_arguments.delta') {
+      const toolIndex = this.itemToToolIndex.get(eventData.item_id);
+      if (toolIndex === undefined) {
+        return null;
+      }
+      return this.createToolCallChunk(toolIndex, null, null, eventData.delta || '');
+    }
+
+    if (eventType === 'response.function_call_arguments.done' || eventType === 'response.output_item.done') {
+      return null;
+    }
+
     if (eventType === 'response.done') {
       const status = eventData.response?.status;
       let finishReason = 'stop';
       
-      if (status === 'completed') {
-        finishReason = 'stop';
+      if (this.hasToolCalls) {
+        finishReason = 'tool_calls';
       } else if (status === 'incomplete') {
         finishReason = 'length';
       }
@@ -87,6 +116,35 @@ export class OpenAIResponseTransformer {
 
   createDoneSignal() {
     return 'data: [DONE]\n\n';
+  }
+
+  createToolCallChunk(index, id, name, args) {
+    const toolCall = { index, type: 'function', function: {} };
+    if (id) {
+      toolCall.id = id;
+    }
+    if (name) {
+      toolCall.function.name = name;
+    }
+    if (args) {
+      toolCall.function.arguments = args;
+    }
+
+    const chunk = {
+      id: this.requestId,
+      object: 'chat.completion.chunk',
+      created: this.created,
+      model: this.model,
+      choices: [
+        {
+          index: 0,
+          delta: { tool_calls: [toolCall] },
+          finish_reason: null
+        }
+      ]
+    };
+
+    return `data: ${JSON.stringify(chunk)}\n\n`;
   }
 
   async *transformStream(sourceStream) {

@@ -1,11 +1,26 @@
 import { logDebug } from '../logger.js';
 
+const THOUGHT_SIGNATURE_MARKER = '#ts=';
+
+/**
+ * Gemini 3 requires the thought signature of a function call to be replayed with it.
+ * OpenAI tool calls have nowhere to store it, so carry it inside the tool call id.
+ */
+export function encodeThoughtSignature(toolCallId, thoughtSignature) {
+  if (!thoughtSignature) {
+    return toolCallId;
+  }
+  return `${toolCallId}${THOUGHT_SIGNATURE_MARKER}${Buffer.from(thoughtSignature, 'utf8').toString('base64url')}`;
+}
+
 export class GoogleResponseTransformer {
   constructor(model, requestId) {
     this.model = model;
     this.requestId = requestId || `chatcmpl-${Date.now()}`;
     this.created = Math.floor(Date.now() / 1000);
     this.sentRole = false;
+    this.toolCallCount = 0;
+    this.hasToolCalls = false;
   }
 
   parseSSELine(line) {
@@ -49,6 +64,23 @@ export class GoogleResponseTransformer {
     for (const part of parts) {
       // Skip thinking/thought parts
       if (part.thought === true) continue;
+
+      if (part.functionCall) {
+        if (!this.sentRole) {
+          this.sentRole = true;
+          results += this.createOpenAIChunk('', 'assistant', false);
+        }
+        const toolIndex = this.toolCallCount++;
+        this.hasToolCalls = true;
+        const rawId = part.functionCall.id || `call_${Date.now()}_${toolIndex}`;
+        results += this.createToolCallChunk(
+          toolIndex,
+          encodeThoughtSignature(rawId, part.thoughtSignature),
+          part.functionCall.name,
+          JSON.stringify(part.functionCall.args ?? {})
+        );
+        continue;
+      }
 
       const text = part.text || '';
       if (!text && !candidate.finishReason) continue;
@@ -116,11 +148,44 @@ export class GoogleResponseTransformer {
     return `data: ${JSON.stringify(chunk)}\n\n`;
   }
 
+  createToolCallChunk(index, id, name, args) {
+    const toolCall = { index, type: 'function', function: {} };
+    if (id) {
+      toolCall.id = id;
+    }
+    if (name) {
+      toolCall.function.name = name;
+    }
+    if (args) {
+      toolCall.function.arguments = args;
+    }
+
+    const chunk = {
+      id: this.requestId,
+      object: 'chat.completion.chunk',
+      created: this.created,
+      model: this.model,
+      choices: [
+        {
+          index: 0,
+          delta: { tool_calls: [toolCall] },
+          finish_reason: null
+        }
+      ]
+    };
+
+    return `data: ${JSON.stringify(chunk)}\n\n`;
+  }
+
   createDoneSignal() {
     return 'data: [DONE]\n\n';
   }
 
   mapFinishReason(googleReason) {
+    if (this.hasToolCalls) {
+      return 'tool_calls';
+    }
+
     const mapping = {
       'STOP': 'stop',
       'MAX_TOKENS': 'length',

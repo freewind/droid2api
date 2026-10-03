@@ -8,7 +8,7 @@ import { transformToCommon, getCommonHeaders } from './transformers/request-comm
 import { transformToGoogle, getGoogleHeaders } from './transformers/request-google.js';
 import { AnthropicResponseTransformer } from './transformers/response-anthropic.js';
 import { OpenAIResponseTransformer } from './transformers/response-openai.js';
-import { GoogleResponseTransformer } from './transformers/response-google.js';
+import { GoogleResponseTransformer, encodeThoughtSignature } from './transformers/response-google.js';
 import { getApiKey } from './auth.js';
 import { getNextProxyAgent } from './proxy-manager.js';
 
@@ -26,6 +26,23 @@ function convertResponseToChatCompletion(resp) {
   const outputMsg = (resp.output || []).find(o => o.type === 'message');
   const textBlocks = outputMsg?.content?.filter(c => c.type === 'output_text') || [];
   const content = textBlocks.map(c => c.text).join('');
+  const functionCalls = (resp.output || []).filter(o => o.type === 'function_call');
+
+  const message = {
+    role: outputMsg?.role || 'assistant',
+    content: content || ''
+  };
+
+  if (functionCalls.length > 0) {
+    message.tool_calls = functionCalls.map((call, index) => ({
+      id: call.call_id || call.id || `call_${index}`,
+      type: 'function',
+      function: {
+        name: call.name,
+        arguments: call.arguments || '{}'
+      }
+    }));
+  }
 
   const chatCompletion = {
     id: resp.id ? resp.id.replace(/^resp_/, 'chatcmpl-') : `chatcmpl-${Date.now()}`,
@@ -35,11 +52,10 @@ function convertResponseToChatCompletion(resp) {
     choices: [
       {
         index: 0,
-        message: {
-          role: outputMsg?.role || 'assistant',
-          content: content || ''
-        },
-        finish_reason: resp.status === 'completed' ? 'stop' : 'unknown'
+        message,
+        finish_reason: functionCalls.length > 0
+          ? 'tool_calls'
+          : (resp.status === 'completed' ? 'stop' : 'unknown')
       }
     ],
     usage: {
@@ -65,12 +81,33 @@ function convertGoogleResponseToChatCompletion(resp, modelId) {
     .map(p => p.text || '')
     .join('');
 
+  const functionCallParts = parts.filter(p => p.functionCall);
+
   const finishReasonMap = {
     'STOP': 'stop',
     'MAX_TOKENS': 'length',
     'SAFETY': 'content_filter',
     'RECITATION': 'content_filter'
   };
+
+  const message = {
+    role: 'assistant',
+    content: content || ''
+  };
+
+  if (functionCallParts.length > 0) {
+    message.tool_calls = functionCallParts.map((part, index) => ({
+      id: encodeThoughtSignature(
+        part.functionCall.id || `call_${index}`,
+        part.thoughtSignature
+      ),
+      type: 'function',
+      function: {
+        name: part.functionCall.name,
+        arguments: JSON.stringify(part.functionCall.args ?? {})
+      }
+    }));
+  }
 
   return {
     id: `chatcmpl-${Date.now()}`,
@@ -80,17 +117,133 @@ function convertGoogleResponseToChatCompletion(resp, modelId) {
     choices: [
       {
         index: 0,
-        message: {
-          role: 'assistant',
-          content: content || ''
-        },
-        finish_reason: finishReasonMap[candidate?.finishReason] || 'stop'
+        message,
+        finish_reason: functionCallParts.length > 0
+          ? 'tool_calls'
+          : (finishReasonMap[candidate?.finishReason] || 'stop')
       }
     ],
     usage: {
       prompt_tokens: resp.usageMetadata?.promptTokenCount ?? 0,
       completion_tokens: resp.usageMetadata?.candidatesTokenCount ?? 0,
       total_tokens: resp.usageMetadata?.totalTokenCount ?? 0
+    }
+  };
+}
+
+/**
+ * Factory's Gemini route answers with SSE even when stream=false, so aggregate the
+ * chunks into a single generateContent-style response before converting.
+ */
+function aggregateGoogleSse(sseText) {
+  const textChunks = [];
+  const functionCalls = [];
+  let usageMetadata = null;
+  let finishReason = null;
+  let role = 'model';
+
+  for (const line of sseText.split('\n')) {
+    if (!line.startsWith('data:')) continue;
+
+    const payload = line.slice(5).trim();
+    if (!payload || payload === '[DONE]') continue;
+
+    let chunk;
+    try {
+      chunk = JSON.parse(payload);
+    } catch (e) {
+      continue;
+    }
+
+    const candidate = chunk.candidates?.[0];
+    if (candidate) {
+      if (candidate.content?.role) {
+        role = candidate.content.role;
+      }
+      for (const part of candidate.content?.parts || []) {
+        if (typeof part.text === 'string') {
+          textChunks.push(part.text);
+        } else {
+          functionCalls.push(part);
+        }
+      }
+      if (candidate.finishReason) {
+        finishReason = candidate.finishReason;
+      }
+    }
+
+    if (chunk.usageMetadata) {
+      usageMetadata = chunk.usageMetadata;
+    }
+  }
+
+  const parts = [];
+  if (textChunks.length > 0) {
+    parts.push({ text: textChunks.join('') });
+  }
+  parts.push(...functionCalls);
+
+  return {
+    candidates: [{ content: { role, parts }, finishReason }],
+    usageMetadata: usageMetadata || {}
+  };
+}
+
+/**
+ * Convert a native Anthropic Messages response to a /v1/chat/completions-compatible format.
+ * Mirrors AnthropicResponseTransformer so streaming and non-streaming agree.
+ */
+function convertAnthropicResponseToChatCompletion(resp, modelId) {
+  if (!resp || typeof resp !== 'object') {
+    throw new Error('Invalid response object');
+  }
+
+  const blocks = Array.isArray(resp.content) ? resp.content : [];
+  const text = blocks.filter(block => block.type === 'text').map(block => block.text).join('');
+  const toolUses = blocks.filter(block => block.type === 'tool_use');
+
+  const message = {
+    role: resp.role || 'assistant',
+    content: text || null
+  };
+
+  if (toolUses.length > 0) {
+    message.tool_calls = toolUses.map((block, index) => ({
+      id: block.id || `toolu_${index}`,
+      type: 'function',
+      function: {
+        name: block.name,
+        arguments: JSON.stringify(block.input ?? {})
+      }
+    }));
+  }
+
+  const finishReason = {
+    'end_turn': 'stop',
+    'max_tokens': 'length',
+    'stop_sequence': 'stop',
+    'tool_use': 'tool_calls'
+  }[resp.stop_reason] || 'stop';
+
+  const inputTokens = resp.usage?.input_tokens ?? 0;
+  const outputTokens = resp.usage?.output_tokens ?? 0;
+
+  return {
+    id: resp.id ? resp.id.replace(/^msg_/, 'chatcmpl-') : `chatcmpl-${Date.now()}`,
+    object: 'chat.completion',
+    created: Math.floor(Date.now() / 1000),
+    model: resp.model || modelId || 'unknown-model',
+    choices: [
+      {
+        index: 0,
+        message,
+        finish_reason: finishReason
+      }
+    ],
+    usage: {
+      prompt_tokens: inputTokens,
+      completion_tokens: outputTokens,
+      total_tokens: inputTokens + outputTokens
     }
   };
 }
@@ -262,7 +415,15 @@ async function handleChatCompletions(req, res) {
         }
       }
     } else {
-      const data = await response.json();
+      const rawBody = await response.text();
+      let data;
+      if (model.type === 'google' && rawBody.trimStart().startsWith('data:')) {
+        // Factory's Gemini route always streams, even when the client asked for a single response.
+        data = aggregateGoogleSse(rawBody);
+      } else {
+        data = JSON.parse(rawBody);
+      }
+
       if (model.type === 'openai') {
         try {
           const converted = convertResponseToChatCompletion(data);
@@ -281,8 +442,17 @@ async function handleChatCompletions(req, res) {
           logResponse(200, null, data);
           res.json(data);
         }
+      } else if (model.type === 'anthropic') {
+        try {
+          const converted = convertAnthropicResponseToChatCompletion(data, modelId);
+          logResponse(200, null, converted);
+          res.json(converted);
+        } catch (e) {
+          logResponse(200, null, data);
+          res.json(data);
+        }
       } else {
-        // anthropic/common: 保持现有逻辑，直接转发
+        // common: 保持现有逻辑，直接转发
         logResponse(200, null, data);
         res.json(data);
       }

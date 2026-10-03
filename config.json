@@ -2,7 +2,8 @@
   "port": 3000,
   "model_redirects": {
     "claude-3-5-haiku-20241022": "claude-haiku-4-5-20251001",
-    "claude-sonnet-4-5": "claude-sonnet-4-5-20250929"
+    "claude-sonnet-4-5": "claude-sonnet-4-5-20250929",
+    "glm-5": "glm-5.3"
   },
   "endpoint": [
     {
@@ -533,13 +534,6 @@
     {
       "name": "GLM-4.7",
       "id": "glm-4.7",
-      "type": "common",
-      "reasoning": "off",
-      "provider": "fireworks"
-    },
-    {
-      "name": "GLM-5",
-      "id": "glm-5",
       "type": "common",
       "reasoning": "off",
       "provider": "fireworks"

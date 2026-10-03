@@ -19,6 +19,7 @@ export function transformToGoogle(openaiRequest) {
   }
 
   // Transform messages to contents
+  const toolNamesById = new Map();
   if (openaiRequest.messages && Array.isArray(openaiRequest.messages)) {
     for (const msg of openaiRequest.messages) {
       if (msg.role === 'system') {
@@ -34,6 +35,32 @@ export function transformToGoogle(openaiRequest) {
         continue;
       }
 
+      // Tool results become functionResponse parts inside a user turn
+      if (msg.role === 'tool') {
+        const name = msg.name || toolNamesById.get(msg.tool_call_id);
+        const { id } = splitThoughtSignature(msg.tool_call_id);
+        const functionResponse = {
+          name: name || 'unknown_function',
+          response: toFunctionResponsePayload(msg.content)
+        };
+        if (id) {
+          functionResponse.id = id;
+        }
+
+        const lastContent = googleRequest.contents[googleRequest.contents.length - 1];
+        const lastHoldsFunctionResponses = lastContent
+          && lastContent.role === 'user'
+          && lastContent.parts.length > 0
+          && lastContent.parts.every(part => part.functionResponse);
+
+        if (lastHoldsFunctionResponses) {
+          lastContent.parts.push({ functionResponse });
+        } else {
+          googleRequest.contents.push({ role: 'user', parts: [{ functionResponse }] });
+        }
+        continue;
+      }
+
       // Map OpenAI "assistant" -> Google "model"
       const googleRole = msg.role === 'assistant' ? 'model' : msg.role;
       const googleMsg = {
@@ -42,11 +69,15 @@ export function transformToGoogle(openaiRequest) {
       };
 
       if (typeof msg.content === 'string') {
-        googleMsg.parts.push({ text: msg.content });
+        if (msg.content.length > 0) {
+          googleMsg.parts.push({ text: msg.content });
+        }
       } else if (Array.isArray(msg.content)) {
         for (const part of msg.content) {
           if (part.type === 'text') {
-            googleMsg.parts.push({ text: part.text });
+            if (part.text) {
+              googleMsg.parts.push({ text: part.text });
+            }
           } else if (part.type === 'image_url') {
             googleMsg.parts.push({
               inlineData: {
@@ -60,7 +91,36 @@ export function transformToGoogle(openaiRequest) {
         }
       }
 
-      googleRequest.contents.push(googleMsg);
+      // Assistant tool_calls become functionCall parts
+      if (Array.isArray(msg.tool_calls)) {
+        for (const call of msg.tool_calls) {
+          const name = call.function?.name;
+          const { id, thoughtSignature } = splitThoughtSignature(call.id);
+
+          if (id && name) {
+            toolNamesById.set(call.id, name);
+          }
+
+          const part = {
+            functionCall: {
+              name,
+              args: parseToolArguments(call.function?.arguments)
+            }
+          };
+          if (id) {
+            part.functionCall.id = id;
+          }
+          if (thoughtSignature) {
+            part.thoughtSignature = thoughtSignature;
+          }
+
+          googleMsg.parts.push(part);
+        }
+      }
+
+      if (googleMsg.parts.length > 0) {
+        googleRequest.contents.push(googleMsg);
+      }
     }
   }
 
@@ -124,13 +184,149 @@ export function transformToGoogle(openaiRequest) {
         .map(tool => ({
           name: tool.function.name,
           description: tool.function.description,
-          parameters: tool.function.parameters || {}
+          parameters: sanitizeSchemaForGoogle(tool.function.parameters || {})
         }))
     }];
   }
 
   logDebug('Transformed Google request', googleRequest);
   return googleRequest;
+}
+
+const THOUGHT_SIGNATURE_MARKER = '#ts=';
+
+function splitThoughtSignature(toolCallId) {
+  if (typeof toolCallId !== 'string') {
+    return { id: toolCallId, thoughtSignature: null };
+  }
+
+  const at = toolCallId.indexOf(THOUGHT_SIGNATURE_MARKER);
+  if (at === -1) {
+    return { id: toolCallId, thoughtSignature: null };
+  }
+
+  const id = toolCallId.slice(0, at);
+  const encoded = toolCallId.slice(at + THOUGHT_SIGNATURE_MARKER.length);
+
+  try {
+    return { id, thoughtSignature: Buffer.from(encoded, 'base64url').toString('utf8') };
+  } catch (e) {
+    return { id, thoughtSignature: null };
+  }
+}
+
+function toFunctionResponsePayload(content) {
+  if (typeof content === 'string') {
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (e) {
+      // fall through to a plain text payload
+    }
+    return { output: content };
+  }
+  if (content && typeof content === 'object') {
+    return content;
+  }
+  return { output: '' };
+}
+
+function parseToolArguments(args) {
+  if (typeof args !== 'string') {
+    return args ?? {};
+  }
+  try {
+    return JSON.parse(args);
+  } catch (e) {
+    return {};
+  }
+}
+
+const GOOGLE_SCHEMA_KEYS = [
+  'description', 'format', 'pattern', 'minimum', 'maximum',
+  'minItems', 'maxItems', 'minLength', 'maxLength', 'default'
+];
+
+/**
+ * Gemini rejects JSON Schema features such as union types and unknown keywords,
+ * so reduce a tool parameter schema to the subset it accepts.
+ */
+function sanitizeSchemaForGoogle(schema) {
+  if (Array.isArray(schema)) {
+    return schema.map(sanitizeSchemaForGoogle);
+  }
+  if (!schema || typeof schema !== 'object') {
+    return { type: 'string' };
+  }
+
+  const result = {};
+  let nullable = schema.nullable === true;
+  let type = schema.type;
+
+  if (Array.isArray(type)) {
+    nullable = nullable || type.includes('null');
+    type = type.filter(entry => entry !== 'null')[0];
+  }
+
+  if (type && type !== 'null') {
+    result.type = type;
+  }
+
+  if (schema.properties && typeof schema.properties === 'object') {
+    result.properties = {};
+    for (const [key, value] of Object.entries(schema.properties)) {
+      result.properties[key] = sanitizeSchemaForGoogle(value);
+    }
+  }
+
+  if (Array.isArray(schema.required) && schema.required.length > 0) {
+    result.required = schema.required;
+  }
+
+  if (schema.items) {
+    result.items = sanitizeSchemaForGoogle(schema.items);
+  }
+
+  if (Array.isArray(schema.enum)) {
+    const values = schema.enum.filter(entry => entry !== null);
+    if (values.length > 0) {
+      result.enum = values;
+    }
+    if (values.length !== schema.enum.length) {
+      nullable = true;
+    }
+  }
+
+  for (const key of GOOGLE_SCHEMA_KEYS) {
+    if (schema[key] !== undefined) {
+      result[key] = schema[key];
+    }
+  }
+
+  if (nullable) {
+    result.nullable = true;
+  }
+
+  // Resolve unions that have no explicit type by taking the first usable branch
+  if (!result.type) {
+    const branches = schema.anyOf || schema.oneOf;
+    if (Array.isArray(branches)) {
+      const usable = branches
+        .map(sanitizeSchemaForGoogle)
+        .filter(branch => branch && branch.type && branch.type !== 'null');
+      if (usable.length > 0) {
+        Object.assign(result, usable[0]);
+      }
+    }
+  }
+
+  if (!result.type) {
+    result.type = 'string';
+  }
+
+  return result;
 }
 
 export function getGoogleHeaders(authHeader, clientHeaders = {}, provider = 'google') {

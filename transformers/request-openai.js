@@ -26,6 +26,16 @@ export function transformToOpenAI(openaiRequest) {
   // Transform messages to input
   if (openaiRequest.messages && Array.isArray(openaiRequest.messages)) {
     for (const msg of openaiRequest.messages) {
+      // Tool results become function_call_output items
+      if (msg.role === 'tool') {
+        targetRequest.input.push({
+          type: 'function_call_output',
+          call_id: msg.tool_call_id,
+          output: toOutputText(msg.content)
+        });
+        continue;
+      }
+
       const inputMsg = {
         role: msg.role,
         content: []
@@ -37,17 +47,21 @@ export function transformToOpenAI(openaiRequest) {
       const imageType = msg.role === 'assistant' ? 'output_image' : 'input_image';
 
       if (typeof msg.content === 'string') {
-        inputMsg.content.push({
-          type: textType,
-          text: msg.content
-        });
+        if (msg.content.length > 0) {
+          inputMsg.content.push({
+            type: textType,
+            text: msg.content
+          });
+        }
       } else if (Array.isArray(msg.content)) {
         for (const part of msg.content) {
           if (part.type === 'text') {
-            inputMsg.content.push({
-              type: textType,
-              text: part.text
-            });
+            if (part.text) {
+              inputMsg.content.push({
+                type: textType,
+                text: part.text
+              });
+            }
           } else if (part.type === 'image_url') {
             inputMsg.content.push({
               type: imageType,
@@ -60,16 +74,42 @@ export function transformToOpenAI(openaiRequest) {
         }
       }
 
-      targetRequest.input.push(inputMsg);
+      const toolCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+
+      // An assistant turn that only carries tool calls has no message body to send
+      if (inputMsg.content.length > 0 || toolCalls.length === 0) {
+        targetRequest.input.push(inputMsg);
+      }
+
+      for (const call of toolCalls) {
+        targetRequest.input.push({
+          type: 'function_call',
+          call_id: call.id,
+          name: call.function?.name,
+          arguments: call.function?.arguments ?? ''
+        });
+      }
     }
   }
 
   // Transform tools if present
   if (openaiRequest.tools && Array.isArray(openaiRequest.tools)) {
-    targetRequest.tools = openaiRequest.tools.map(tool => ({
-      ...tool,
-      strict: false
-    }));
+    targetRequest.tools = openaiRequest.tools
+      .filter(tool => tool.type === 'function')
+      .map(tool => ({
+        type: 'function',
+        name: tool.function.name,
+        description: tool.function.description,
+        parameters: tool.function.parameters || {},
+        strict: false
+      }));
+  }
+
+  if (openaiRequest.tool_choice !== undefined) {
+    const choice = openaiRequest.tool_choice;
+    targetRequest.tool_choice = (choice && typeof choice === 'object' && choice.type === 'function')
+      ? { type: 'function', name: choice.function?.name }
+      : choice;
   }
 
   // Extract system message as instructions and prepend system prompt
@@ -187,6 +227,16 @@ export function getOpenAIHeaders(authHeader, clientHeaders = {}, provider = 'ope
   });
 
   return headers;
+}
+
+function toOutputText(content) {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content.map(part => (part.type === 'text' ? part.text : JSON.stringify(part))).join('');
+  }
+  return '';
 }
 
 function generateUUID() {

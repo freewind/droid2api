@@ -51,23 +51,50 @@ export function transformToAnthropic(openaiRequest) {
         continue; // Skip adding system messages to messages array
       }
 
+      // Anthropic represents tool results as tool_result blocks inside a user message
+      if (msg.role === 'tool') {
+        const toolResult = {
+          type: 'tool_result',
+          tool_use_id: msg.tool_call_id,
+          content: toToolResultContent(msg.content)
+        };
+
+        const lastMessage = anthropicRequest.messages[anthropicRequest.messages.length - 1];
+        const lastHoldsToolResults = lastMessage
+          && lastMessage.role === 'user'
+          && Array.isArray(lastMessage.content)
+          && lastMessage.content.length > 0
+          && lastMessage.content.every(part => part.type === 'tool_result');
+
+        if (lastHoldsToolResults) {
+          lastMessage.content.push(toolResult);
+        } else {
+          anthropicRequest.messages.push({ role: 'user', content: [toolResult] });
+        }
+        continue;
+      }
+
       const anthropicMsg = {
         role: msg.role,
         content: []
       };
 
       if (typeof msg.content === 'string') {
-        anthropicMsg.content.push({
-          type: 'text',
-          text: msg.content
-        });
+        if (msg.content.length > 0) {
+          anthropicMsg.content.push({
+            type: 'text',
+            text: msg.content
+          });
+        }
       } else if (Array.isArray(msg.content)) {
         for (const part of msg.content) {
           if (part.type === 'text') {
-            anthropicMsg.content.push({
-              type: 'text',
-              text: part.text
-            });
+            if (part.text) {
+              anthropicMsg.content.push({
+                type: 'text',
+                text: part.text
+              });
+            }
           } else if (part.type === 'image_url') {
             anthropicMsg.content.push({
               type: 'image',
@@ -77,6 +104,23 @@ export function transformToAnthropic(openaiRequest) {
             anthropicMsg.content.push(part);
           }
         }
+      }
+
+      // Assistant tool_calls become tool_use content blocks
+      if (Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+        for (const call of msg.tool_calls) {
+          anthropicMsg.content.push({
+            type: 'tool_use',
+            id: call.id,
+            name: call.function?.name,
+            input: parseToolArguments(call.function?.arguments)
+          });
+        }
+      }
+
+      // Anthropic rejects messages with no content blocks
+      if (anthropicMsg.content.length === 0) {
+        continue;
       }
 
       anthropicRequest.messages.push(anthropicMsg);
@@ -154,6 +198,27 @@ export function transformToAnthropic(openaiRequest) {
 
   logDebug('Transformed Anthropic request', anthropicRequest);
   return anthropicRequest;
+}
+
+function toToolResultContent(content) {
+  if (typeof content === 'string') {
+    return [{ type: 'text', text: content }];
+  }
+  if (Array.isArray(content)) {
+    return content.map(part => (part.type === 'text' ? { type: 'text', text: part.text } : part));
+  }
+  return [{ type: 'text', text: '' }];
+}
+
+function parseToolArguments(args) {
+  if (typeof args !== 'string') {
+    return args ?? {};
+  }
+  try {
+    return JSON.parse(args);
+  } catch (e) {
+    return {};
+  }
 }
 
 export function getAnthropicHeaders(authHeader, clientHeaders = {}, isStreaming = true, modelId = null, provider = 'anthropic') {
