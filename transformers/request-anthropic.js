@@ -1,5 +1,6 @@
 import { logDebug } from '../logger.js';
-import { getSystemPrompt, getModelReasoning, getModelFast, getUserAgent } from '../config.js';
+import { getSystemPrompt, getModelReasoning, getModelFast, getUserAgent, getClientVersion } from '../config.js';
+import { getOrgId } from '../auth.js';
 
 export function transformToAnthropic(openaiRequest) {
   logDebug('Transforming OpenAI request to Anthropic format');
@@ -168,6 +169,8 @@ export function getAnthropicHeaders(authHeader, clientHeaders = {}, isStreaming 
     'x-api-key': 'placeholder',
     'x-api-provider': provider,
     'x-factory-client': 'cli',
+    'x-client-version': getClientVersion(),
+    'x-provider-routing-source': 'registry_default',
     'x-session-id': sessionId,
     'x-assistant-message-id': messageId,
     'user-agent': getUserAgent(),
@@ -175,14 +178,24 @@ export function getAnthropicHeaders(authHeader, clientHeaders = {}, isStreaming 
     'connection': 'keep-alive'
   }
 
+  const orgId = getOrgId();
+  if (orgId) {
+    headers['x-factory-org-id'] = orgId;
+  }
+
   // Handle anthropic-beta header based on reasoning configuration
   const reasoningLevel = modelId ? getModelReasoning(modelId) : null;
-  let betaValues = [];
+  // droid always opts into fine-grained tool streaming
+  let betaValues = ['fine-grained-tool-streaming-2025-05-14'];
   
   // Add existing beta values from client headers
   if (clientHeaders['anthropic-beta']) {
     const existingBeta = clientHeaders['anthropic-beta'];
-    betaValues = existingBeta.split(',').map(v => v.trim());
+    for (const value of existingBeta.split(',').map(v => v.trim())) {
+      if (value && !betaValues.includes(value)) {
+        betaValues.push(value);
+      }
+    }
   }
   
   // Handle thinking beta based on reasoning configuration
@@ -220,14 +233,9 @@ export function getAnthropicHeaders(authHeader, clientHeaders = {}, isStreaming 
     'x-stainless-os': 'MacOS',
     'x-stainless-runtime': 'node',
     'x-stainless-retry-count': '0',
-    'x-stainless-package-version': '0.57.0',
-    'x-stainless-runtime-version': 'v24.3.0'
+    'x-stainless-package-version': '0.70.1',
+    'x-stainless-runtime-version': 'v26.3.0'
   };
-
-  // Set helper-method based on streaming
-  if (isStreaming) {
-    headers['x-stainless-helper-method'] = 'stream';
-  }
 
   // Copy Stainless headers from client or use defaults
   Object.keys(stainlessDefaults).forEach(header => {

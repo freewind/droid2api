@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import crypto from 'crypto';
+import { execFileSync } from 'child_process';
 import fetch from 'node-fetch';
 import { logDebug, logError, logInfo } from './logger.js';
 import { getNextProxyAgent } from './proxy-manager.js';
@@ -10,13 +12,20 @@ let currentApiKey = null;
 let currentRefreshToken = null;
 let lastRefreshTime = null;
 let clientId = null;
-let authSource = null; // 'env' or 'file' or 'factory_key' or 'client'
+let authSource = null; // 'env' or 'file' or 'factory_key' or 'v2' or 'client'
 let authFilePath = null;
 let factoryApiKey = null; // From FACTORY_API_KEY environment variable
+let currentOrgId = null; // Active Factory organization id
+let v2Credentials = null; // Raw payload of ~/.factory/auth.v2.loginkeychain
 
 const REFRESH_URL = 'https://api.workos.com/user_management/authenticate';
 const REFRESH_INTERVAL_HOURS = 6; // Refresh every 6 hours
 const TOKEN_VALID_HOURS = 8; // Token valid for 8 hours
+
+// New droid CLI credential storage (AES-256-GCM, key kept in the macOS Keychain)
+const V2_CREDENTIALS_PATH = path.join(os.homedir(), '.factory', 'auth.v2.loginkeychain');
+const KEYCHAIN_SERVICE = 'Factory CLI';
+const KEYCHAIN_ACCOUNTS = ['auth-encryption-key-security-cli', 'auth-encryption-key'];
 
 /**
  * Generate a ULID (Universally Unique Lexicographically Sortable Identifier)
@@ -59,6 +68,122 @@ function generateClientId() {
 }
 
 /**
+ * Read the AES-256-GCM key droid stores in the macOS Keychain.
+ */
+function readKeychainKey() {
+  for (const account of KEYCHAIN_ACCOUNTS) {
+    try {
+      const value = execFileSync(
+        '/usr/bin/security',
+        ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', account, '-w'],
+        { encoding: 'utf8', timeout: 10000 }
+      ).trim();
+
+      if (value) {
+        const key = Buffer.from(value, 'base64');
+        if (key.length === 32) {
+          logDebug(`Loaded credential encryption key from keychain account "${account}"`);
+          return key;
+        }
+        logDebug(`Keychain account "${account}" returned an unexpected key length: ${key.length}`);
+      }
+    } catch (error) {
+      logDebug(`Keychain lookup failed for account "${account}": ${error.message}`);
+    }
+  }
+  return null;
+}
+
+/**
+ * Decrypt a droid v2 credential payload. Format: iv:authTag:ciphertext (all base64).
+ */
+function decryptV2Credentials(raw, key) {
+  const parts = raw.trim().split(':');
+  if (parts.length !== 3) {
+    throw new Error('Unexpected auth.v2 credential format');
+  }
+
+  const [iv, authTag, ciphertext] = parts.map(part => Buffer.from(part, 'base64'));
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+
+  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+  return JSON.parse(plaintext);
+}
+
+/**
+ * Load credentials written by droid >= 0.2xx (~/.factory/auth.v2.loginkeychain).
+ */
+function loadV2Credentials() {
+  try {
+    if (!fs.existsSync(V2_CREDENTIALS_PATH)) {
+      return null;
+    }
+
+    const key = readKeychainKey();
+    if (!key) {
+      logError('Cannot read the droid credential encryption key from the macOS Keychain');
+      return null;
+    }
+
+    const data = decryptV2Credentials(fs.readFileSync(V2_CREDENTIALS_PATH, 'utf-8'), key);
+    if (!data || typeof data !== 'object') {
+      return null;
+    }
+
+    v2Credentials = data;
+    return data;
+  } catch (error) {
+    logError(`Failed to load ${V2_CREDENTIALS_PATH}`, error);
+    return null;
+  }
+}
+
+/**
+ * Persist refreshed tokens back into the droid v2 credential file, re-encrypted
+ * with the same Keychain key so the droid CLI keeps working.
+ */
+function saveV2Tokens(accessToken, refreshToken) {
+  try {
+    const key = readKeychainKey();
+    if (!key || !v2Credentials) {
+      logError('Skipping credential save: encryption key or previous payload unavailable');
+      return;
+    }
+
+    const payload = {
+      ...v2Credentials,
+      access_token: accessToken,
+      refresh_token: refreshToken
+    };
+
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const ciphertext = Buffer.concat([cipher.update(JSON.stringify(payload), 'utf8'), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+    const encoded = `${iv.toString('base64')}:${authTag.toString('base64')}:${ciphertext.toString('base64')}`;
+
+    fs.writeFileSync(V2_CREDENTIALS_PATH, encoded, { mode: 0o600 });
+    v2Credentials = payload;
+    logDebug(`Tokens saved to ${V2_CREDENTIALS_PATH}`);
+  } catch (error) {
+    logError('Failed to save tokens to the droid v2 credential file', error);
+  }
+}
+
+/**
+ * Access token expiry (ms since epoch) parsed from a JWT, or null when unavailable.
+ */
+function getTokenExpiryMs(token) {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString('utf8'));
+    return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
  * Load auth configuration with priority system
  * Priority: FACTORY_API_KEY > refresh token mechanism > client authorization
  */
@@ -69,6 +194,14 @@ function loadAuthConfig() {
     logInfo('Using fixed API key from FACTORY_API_KEY environment variable');
     factoryApiKey = factoryKey.trim();
     authSource = 'factory_key';
+
+    // Still pick up the active organization from the droid credential file when present,
+    // so upstream calls carry x-factory-org-id.
+    const v2 = loadV2Credentials();
+    if (v2?.active_organization_id) {
+      currentOrgId = v2.active_organization_id;
+    }
+
     return { type: 'factory_key', value: factoryKey.trim() };
   }
 
@@ -81,7 +214,38 @@ function loadAuthConfig() {
     return { type: 'refresh', value: envRefreshKey.trim() };
   }
 
-  // 3. Check ~/.factory/auth.json
+  // 3. Check the current droid credential storage (~/.factory/auth.v2.loginkeychain)
+  const v2 = loadV2Credentials();
+  if (v2) {
+    if (v2.active_organization_id) {
+      currentOrgId = v2.active_organization_id;
+    }
+
+    if (v2.refresh_token) {
+      logInfo('Using credentials from ~/.factory/auth.v2.loginkeychain');
+      authSource = 'v2';
+      authFilePath = V2_CREDENTIALS_PATH;
+      currentApiKey = v2.access_token ?? null;
+      currentRefreshToken = v2.refresh_token;
+
+      // Treat the stored access token as fresh until it actually nears expiry.
+      const expiryMs = currentApiKey ? getTokenExpiryMs(currentApiKey) : null;
+      lastRefreshTime = expiryMs
+        ? expiryMs - REFRESH_INTERVAL_HOURS * 60 * 60 * 1000
+        : Date.now();
+
+      return { type: 'refresh', value: v2.refresh_token };
+    }
+
+    if (v2.access_token) {
+      logInfo('Using access token from ~/.factory/auth.v2.loginkeychain (no refresh token present)');
+      authSource = 'v2-fixed';
+      currentApiKey = v2.access_token;
+      return { type: 'fixed', value: v2.access_token };
+    }
+  }
+
+  // 4. Check ~/.factory/auth.json (legacy droid storage)
   const homeDir = os.homedir();
   const factoryAuthPath = path.join(homeDir, '.factory', 'auth.json');
   
@@ -107,7 +271,7 @@ function loadAuthConfig() {
     logError('Error reading ~/.factory/auth.json', error);
   }
 
-  // 4. No configured auth found - will use client authorization
+  // 5. No configured auth found - will use client authorization
   logInfo('No auth configuration found, will use client authorization headers');
   authSource = 'client';
   return { type: 'client', value: null };
@@ -169,8 +333,16 @@ async function refreshApiKey() {
       logInfo(`Organization ID: ${data.organization_id}`);
     }
 
-    // Save tokens to file
-    saveTokens(data.access_token, data.refresh_token);
+    if (data.organization_id) {
+      currentOrgId = data.organization_id;
+    }
+
+    // Save tokens back to the storage they came from
+    if (authSource === 'v2') {
+      saveV2Tokens(data.access_token, data.refresh_token);
+    } else {
+      saveTokens(data.access_token, data.refresh_token);
+    }
 
     logInfo(`New Refresh-Key: ${currentRefreshToken}`);
     logInfo('API key refreshed successfully');
@@ -243,12 +415,26 @@ export async function initializeAuth() {
     if (authConfig.type === 'factory_key') {
       // Using fixed FACTORY_API_KEY, no refresh needed
       logInfo('Auth system initialized with fixed API key');
+    } else if (authConfig.type === 'fixed') {
+      // Using a stored access token without a refresh token
+      logInfo('Auth system initialized with stored access token');
     } else if (authConfig.type === 'refresh') {
       // Using refresh token mechanism
       currentRefreshToken = authConfig.value;
-      
-      // Always refresh on startup to get fresh token
-      await refreshApiKey();
+
+      if (authSource === 'v2') {
+        // Credentials written by the droid CLI; only refresh when the access token is stale.
+        if (shouldRefresh()) {
+          logInfo('Stored access token is expired or near expiry, refreshing...');
+          await refreshApiKey();
+        } else {
+          logInfo('Using unexpired access token from ~/.factory/auth.v2.loginkeychain');
+        }
+      } else {
+        // Always refresh on startup to get fresh token
+        await refreshApiKey();
+      }
+
       logInfo('Auth system initialized with refresh token mechanism');
     } else {
       // Using client authorization, no setup needed
@@ -263,6 +449,13 @@ export async function initializeAuth() {
 }
 
 /**
+ * Active Factory organization id, used for the x-factory-org-id upstream header.
+ */
+export function getOrgId() {
+  return currentOrgId || process.env.FACTORY_ORG_ID || null;
+}
+
+/**
  * Get API key based on configured authorization method
  * @param {string} clientAuthorization - Authorization header from client request (optional)
  */
@@ -271,9 +464,17 @@ export async function getApiKey(clientAuthorization = null) {
   if (authSource === 'factory_key' && factoryApiKey) {
     return `Bearer ${factoryApiKey}`;
   }
+
+  // Priority 2: stored access token without a refresh token
+  if (authSource === 'v2-fixed') {
+    if (!currentApiKey) {
+      throw new Error('No API key available from ~/.factory/auth.v2.loginkeychain.');
+    }
+    return `Bearer ${currentApiKey}`;
+  }
   
-  // Priority 2: Refresh token mechanism
-  if (authSource === 'env' || authSource === 'file') {
+  // Priority 3: Refresh token mechanism
+  if (authSource === 'env' || authSource === 'file' || authSource === 'v2') {
     // Check if we need to refresh
     if (shouldRefresh()) {
       logInfo('API key needs refresh (6+ hours old)');
@@ -287,7 +488,7 @@ export async function getApiKey(clientAuthorization = null) {
     return `Bearer ${currentApiKey}`;
   }
   
-  // Priority 3: Client authorization header
+  // Priority 4: Client authorization header
   if (clientAuthorization) {
     logDebug('Using client authorization header');
     return clientAuthorization;

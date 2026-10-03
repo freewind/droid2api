@@ -1,5 +1,6 @@
 import { logDebug } from '../logger.js';
-import { getSystemPrompt, getUserAgent, getModelReasoning } from '../config.js';
+import { getSystemPrompt, getUserAgent, getModelReasoning, getClientVersion } from '../config.js';
+import { getOrgId } from '../auth.js';
 
 export function transformToGoogle(openaiRequest) {
   logDebug('Transforming OpenAI request to Google format');
@@ -136,22 +137,24 @@ export function getGoogleHeaders(authHeader, clientHeaders = {}, provider = 'goo
   const sessionId = clientHeaders['x-session-id'] || generateUUID();
   const messageId = clientHeaders['x-assistant-message-id'] || generateUUID();
 
-  const userAgent = getUserAgent();
-  const versionMatch = userAgent.match(/\/(\d+\.\d+\.\d+)/);
-  const clientVersion = versionMatch ? versionMatch[1] : '0.84.0';
-
   const headers = {
     'accept': '*/*',
     'content-type': 'application/json',
     'authorization': authHeader || '',
-    'user-agent': userAgent,
-    'x-client-version': clientVersion,
+    'user-agent': getUserAgent(),
+    'x-client-version': getClientVersion(),
     'x-factory-client': clientHeaders['x-factory-client'] || 'cli',
     'x-api-provider': provider,
+    'x-provider-routing-source': 'registry_default',
     'x-assistant-message-id': messageId,
     'x-session-id': sessionId,
     'connection': 'keep-alive'
   };
+
+  const orgId = getOrgId();
+  if (orgId) {
+    headers['x-factory-org-id'] = orgId;
+  }
 
   return headers;
 }

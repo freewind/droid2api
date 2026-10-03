@@ -72,23 +72,29 @@ npm install
 
 ## 快速开始
 
-### 1. 配置认证（三种方式）
+### 1. 配置认证（四种方式）
 
-**优先级：FACTORY_API_KEY > refresh_token > 客户端authorization**
+**优先级：FACTORY_API_KEY > DROID_REFRESH_KEY > 本地 droid 登录态 > 客户端authorization**
 
 ```bash
 # 方式1：固定API密钥（最高优先级）
 export FACTORY_API_KEY="your_factory_api_key_here"
 
-# 方式2：自动刷新令牌
+# 方式2：自动刷新令牌（DROID_REFRESH_KEY 环境变量）
 export DROID_REFRESH_KEY="your_refresh_token_here"
 
-# 方式3：配置文件 ~/.factory/auth.json
-{
-  "access_token": "your_access_token", 
-  "refresh_token": "your_refresh_token"
-}
+# 方式3：直接复用本机 droid CLI 的登录态（无需任何配置）
+# 自动读取 ~/.factory/auth.v2.loginkeychain（AES-256-GCM 加密），
+# 密钥取自 macOS Keychain（服务 "Factory CLI"，账号
+# "auth-encryption-key-security-cli"/"auth-encryption-key"）。
+# 旧版存储 ~/.factory/auth.json 仍作为兜底。
+```
 
+- 方式3 只使用本机已有的登录状态，access_token 未接近过期时不会发起刷新请求。
+- 刷新发生时会按原格式写回 droid 的凭证文件，droid CLI 的登录态不受影响。
+- 组织 ID 会自动从登录态带出，用于上游 `x-factory-org-id` 头；也可用环境变量 `FACTORY_ORG_ID` 覆盖。
+
+```bash
 # 方式4：无配置（客户端授权）
 # 服务器将使用客户端请求头中的authorization字段
 ```

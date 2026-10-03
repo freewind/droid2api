@@ -1,5 +1,6 @@
 import { logDebug } from '../logger.js';
-import { getSystemPrompt, getUserAgent, getModelReasoning } from '../config.js';
+import { getSystemPrompt, getUserAgent, getModelReasoning, getClientVersion } from '../config.js';
+import { getOrgId } from '../auth.js';
 
 export function transformToCommon(openaiRequest) {
   logDebug('Transforming OpenAI request to Common format');
@@ -68,11 +69,18 @@ export function getCommonHeaders(authHeader, clientHeaders = {}, provider = 'bas
     'authorization': authHeader || '',
     'x-api-provider': provider,
     'x-factory-client': 'cli',
+    'x-client-version': getClientVersion(),
+    'x-provider-routing-source': 'registry_default',
     'x-session-id': sessionId,
     'x-assistant-message-id': messageId,
     'user-agent': getUserAgent(),
     'connection': 'keep-alive'
   };
+
+  const orgId = getOrgId();
+  if (orgId) {
+    headers['x-factory-org-id'] = orgId;
+  }
 
   // Pass through Stainless SDK headers with defaults
   const stainlessDefaults = {
@@ -81,8 +89,8 @@ export function getCommonHeaders(authHeader, clientHeaders = {}, provider = 'bas
     'x-stainless-os': 'MacOS',
     'x-stainless-runtime': 'node',
     'x-stainless-retry-count': '0',
-    'x-stainless-package-version': '5.23.2',
-    'x-stainless-runtime-version': 'v24.3.0'
+    'x-stainless-package-version': '6.25.0',
+    'x-stainless-runtime-version': 'v26.3.0'
   };
 
   // Copy Stainless headers from client or use defaults

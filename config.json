@@ -23,10 +23,81 @@
     }
   ],
   "proxies": [],
+  "openai_platform": "org-bHuLtG1fGmYk5YaOihAAXFBw",
   "models": [
+    {
+      "name": "claude-3-5-sonnet-20241022",
+      "id": "claude-3-5-sonnet-20241022",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "claude-3-7-sonnet-20250219",
+      "id": "claude-3-7-sonnet-20250219",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "claude-3-5-haiku-20241022",
+      "id": "claude-3-5-haiku-20241022",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "claude-sonnet-4-20250514",
+      "id": "claude-sonnet-4-20250514",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "claude-opus-4-1-20250805",
+      "id": "claude-opus-4-1-20250805",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "Sonnet 4.5",
+      "id": "claude-sonnet-4-5-20250929",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
     {
       "name": "Opus 4.5",
       "id": "claude-opus-4-5-20251101",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "Haiku 4.5",
+      "id": "claude-haiku-4-5-20251001",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "Sonnet 4.6",
+      "id": "claude-sonnet-4-6",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "claude-sonnet-5",
+      "id": "claude-sonnet-5",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "claude-sonnet-5-5",
+      "id": "claude-sonnet-5-5",
       "type": "anthropic",
       "reasoning": "auto",
       "provider": "anthropic"
@@ -43,48 +114,142 @@
       "id": "claude-opus-4-6-fast",
       "type": "anthropic",
       "reasoning": "auto",
-      "fast":true,
+      "fast": true,
       "provider": "anthropic"
     },
     {
-      "name": "Haiku 4.5",
-      "id": "claude-haiku-4-5-20251001",
+      "name": "claude-opus-4-7",
+      "id": "claude-opus-4-7",
       "type": "anthropic",
       "reasoning": "auto",
       "provider": "anthropic"
     },
     {
-      "name": "Sonnet 4.5",
-      "id": "claude-sonnet-4-5-20250929",
+      "name": "claude-opus-4-7-fast",
+      "id": "claude-opus-4-7-fast",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "anthropic"
+    },
+    {
+      "name": "claude-opus-4-8",
+      "id": "claude-opus-4-8",
       "type": "anthropic",
       "reasoning": "auto",
       "provider": "anthropic"
     },
     {
-      "name": "Sonnet 4.6",
-      "id": "claude-sonnet-4-6",
+      "name": "claude-opus-4-8-fast",
+      "id": "claude-opus-4-8-fast",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "anthropic"
+    },
+    {
+      "name": "claude-opus-5",
+      "id": "claude-opus-5",
       "type": "anthropic",
       "reasoning": "auto",
       "provider": "anthropic"
     },
     {
-      "name": "GPT-5.4",
-      "id": "gpt-5.4",
+      "name": "claude-opus-5-fast",
+      "id": "claude-opus-5-fast",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "anthropic"
+    },
+    {
+      "name": "claude-opus-5-5",
+      "id": "claude-opus-5-5",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "claude-opus-5-5-fast",
+      "id": "claude-opus-5-5-fast",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "anthropic"
+    },
+    {
+      "name": "claude-fable-5",
+      "id": "claude-fable-5",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "claude-fable-5.1",
+      "id": "claude-fable-5.1",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "atlas-07-21",
+      "id": "atlas-07-21",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "aster-07-15",
+      "id": "aster-07-15",
+      "type": "anthropic",
+      "reasoning": "auto",
+      "provider": "anthropic"
+    },
+    {
+      "name": "gpt-5-2025-08-07",
+      "id": "gpt-5-2025-08-07",
       "type": "openai",
       "reasoning": "auto",
       "provider": "openai"
     },
     {
-      "name": "GPT-5.4 Fast",
-      "id": "gpt-5.4-fast",
+      "name": "gpt-5-mini-2025-08-07",
+      "id": "gpt-5-mini-2025-08-07",
       "type": "openai",
       "reasoning": "auto",
-      "fast":true,
       "provider": "openai"
     },
     {
-      "name": "GPT-5.3 Codex",
-      "id": "gpt-5.3-codex",
+      "name": "gpt-5-nano-2025-08-07",
+      "id": "gpt-5-nano-2025-08-07",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-5-codex",
+      "id": "gpt-5-codex",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-5.1",
+      "id": "gpt-5.1",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-5.1-codex",
+      "id": "gpt-5.1-codex",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-5.1-codex-max",
+      "id": "gpt-5.1-codex-max",
       "type": "openai",
       "reasoning": "auto",
       "provider": "openai"
@@ -103,7 +268,37 @@
       "reasoning": "auto",
       "provider": "openai"
     },
-      {
+    {
+      "name": "GPT-5.3 Codex",
+      "id": "gpt-5.3-codex",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-5.3-codex-fast",
+      "id": "gpt-5.3-codex-fast",
+      "type": "openai",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "openai"
+    },
+    {
+      "name": "GPT-5.4",
+      "id": "gpt-5.4",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "GPT-5.4 Fast",
+      "id": "gpt-5.4-fast",
+      "type": "openai",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "openai"
+    },
+    {
       "name": "GPT-5.4 mini",
       "id": "gpt-5.4-mini",
       "type": "openai",
@@ -111,22 +306,170 @@
       "provider": "openai"
     },
     {
-      "name": "GLM-5",
-      "id": "glm-5",
-      "type": "common",
-      "reasoning": "off",
-      "provider": "fireworks"
+      "name": "gpt-5.4-mini-fast",
+      "id": "gpt-5.4-mini-fast",
+      "type": "openai",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "openai"
     },
     {
-      "name": "GLM-4.7",
-      "id": "glm-4.7",
-      "type": "common",
-      "reasoning": "off",
-      "provider": "fireworks"
+      "name": "gpt-5.5",
+      "id": "gpt-5.5",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
     },
     {
-      "name": "Gemini 3 flash",
-      "id": "gemini-3-flash-preview",
+      "name": "gpt-5.5-fast",
+      "id": "gpt-5.5-fast",
+      "type": "openai",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-5.5-pro",
+      "id": "gpt-5.5-pro",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-5.6-sol",
+      "id": "gpt-5.6-sol",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-5.6-sol-fast",
+      "id": "gpt-5.6-sol-fast",
+      "type": "openai",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-5.6-terra",
+      "id": "gpt-5.6-terra",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-5.6-terra-flex",
+      "id": "gpt-5.6-terra-flex",
+      "type": "openai",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-5.6-luna",
+      "id": "gpt-5.6-luna",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-5.6-luna-flex",
+      "id": "gpt-5.6-luna-flex",
+      "type": "openai",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-6-astra",
+      "id": "gpt-6-astra",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-6-astra-flex",
+      "id": "gpt-6-astra-flex",
+      "type": "openai",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-6.1-sol",
+      "id": "gpt-6.1-sol",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-6-sol",
+      "id": "gpt-6-sol",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-6-sol-flex",
+      "id": "gpt-6-sol-flex",
+      "type": "openai",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-6-luna",
+      "id": "gpt-6-luna",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "openai"
+    },
+    {
+      "name": "gpt-6-luna-flex",
+      "id": "gpt-6-luna-flex",
+      "type": "openai",
+      "reasoning": "auto",
+      "fast": true,
+      "provider": "openai"
+    },
+    {
+      "name": "grok-4.5",
+      "id": "grok-4.5",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "xai"
+    },
+    {
+      "name": "grok-4.6",
+      "id": "grok-4.6",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "xai"
+    },
+    {
+      "name": "grok-4.7",
+      "id": "grok-4.7",
+      "type": "openai",
+      "reasoning": "auto",
+      "provider": "xai"
+    },
+    {
+      "name": "gemini-2.5-flash",
+      "id": "gemini-2.5-flash",
+      "type": "google",
+      "reasoning": "auto",
+      "provider": "google"
+    },
+    {
+      "name": "gemini-2.5-pro",
+      "id": "gemini-2.5-pro",
+      "type": "google",
+      "reasoning": "auto",
+      "provider": "google"
+    },
+    {
+      "name": "gemini-3-pro-preview",
+      "id": "gemini-3-pro-preview",
       "type": "google",
       "reasoning": "auto",
       "provider": "google"
@@ -139,8 +482,156 @@
       "provider": "google"
     },
     {
+      "name": "Gemini 3 flash",
+      "id": "gemini-3-flash-preview",
+      "type": "google",
+      "reasoning": "auto",
+      "provider": "google"
+    },
+    {
+      "name": "gemini-3.5-flash",
+      "id": "gemini-3.5-flash",
+      "type": "google",
+      "reasoning": "auto",
+      "provider": "google"
+    },
+    {
+      "name": "gemini-3.6-flash",
+      "id": "gemini-3.6-flash",
+      "type": "google",
+      "reasoning": "auto",
+      "provider": "google"
+    },
+    {
+      "name": "gemini-3.7-flash",
+      "id": "gemini-3.7-flash",
+      "type": "google",
+      "reasoning": "auto",
+      "provider": "google"
+    },
+    {
+      "name": "gemini-3.8-flash",
+      "id": "gemini-3.8-flash",
+      "type": "google",
+      "reasoning": "auto",
+      "provider": "google"
+    },
+    {
+      "name": "garnet-07-15",
+      "id": "garnet-07-15",
+      "type": "google",
+      "reasoning": "auto",
+      "provider": "google"
+    },
+    {
+      "name": "glm-4.6",
+      "id": "glm-4.6",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "GLM-4.7",
+      "id": "glm-4.7",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "GLM-5",
+      "id": "glm-5",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "glm-5.1",
+      "id": "glm-5.1",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "glm-5.2",
+      "id": "glm-5.2",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "glm-5.2-fast",
+      "id": "glm-5.2-fast",
+      "type": "common",
+      "reasoning": "off",
+      "fast": true,
+      "provider": "fireworks"
+    },
+    {
+      "name": "glm-5.3",
+      "id": "glm-5.3",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "glm-5.3-flash",
+      "id": "glm-5.3-flash",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
       "name": "Kimi K2.5",
       "id": "kimi-k2.5",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "kimi-k2.6",
+      "id": "kimi-k2.6",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "kimi-k2.7-code",
+      "id": "kimi-k2.7-code",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "kimi-k3",
+      "id": "kimi-k3",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "qwen3.8-max",
+      "id": "qwen3.8-max",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "deepseek-v4-flash-0731",
+      "id": "deepseek-v4-flash-0731",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "deepseek-v4.1-flash",
+      "id": "deepseek-v4.1-flash",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "deepseek-v4-pro",
+      "id": "deepseek-v4-pro",
       "type": "common",
       "reasoning": "off",
       "provider": "fireworks"
@@ -151,9 +642,44 @@
       "type": "anthropic",
       "reasoning": "auto",
       "provider": "fireworks"
+    },
+    {
+      "name": "minimax-m2.7",
+      "id": "minimax-m2.7",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "minimax-m3",
+      "id": "minimax-m3",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "mistral-medium-3.5",
+      "id": "mistral-medium-3.5",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "inkling",
+      "id": "inkling",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
+    },
+    {
+      "name": "nemotron-3-ultra",
+      "id": "nemotron-3-ultra",
+      "type": "common",
+      "reasoning": "off",
+      "provider": "fireworks"
     }
   ],
   "dev_mode": false,
-  "user_agent": "factory-cli/0.85.0",
+  "user_agent": "factory-cli/0.233.0",
   "system_prompt": "You are Droid, an AI software engineering agent built by Factory.\n\n"
 }

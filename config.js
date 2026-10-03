@@ -78,6 +78,22 @@ export function getUserAgent() {
   return getCurrentUserAgent();
 }
 
+/**
+ * Client version sent as x-client-version (parsed from the configured user agent).
+ */
+export function getClientVersion() {
+  const match = getUserAgent().match(/\/(\d+\.\d+\.\d+)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Optional openai-platform header forwarded upstream (empty string disables it).
+ */
+export function getOpenAiPlatform() {
+  const cfg = getConfig();
+  return cfg.openai_platform || null;
+}
+
 export function getProxyConfigs() {
   const cfg = getConfig();
   if (!Array.isArray(cfg.proxies)) {

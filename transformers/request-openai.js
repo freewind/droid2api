@@ -1,5 +1,6 @@
 import { logDebug } from '../logger.js';
-import { getSystemPrompt, getModelReasoning, getModelFast, getUserAgent } from '../config.js';
+import { getSystemPrompt, getModelReasoning, getModelFast, getUserAgent, getClientVersion, getOpenAiPlatform } from '../config.js';
+import { getOrgId } from '../auth.js';
 
 export function transformToOpenAI(openaiRequest) {
   logDebug('Transforming OpenAI request to target OpenAI format');
@@ -146,15 +147,28 @@ export function getOpenAIHeaders(authHeader, clientHeaders = {}, provider = 'ope
   const messageId = clientHeaders['x-assistant-message-id'] || generateUUID();
   
   const headers = {
+    'accept': 'application/json',
     'content-type': 'application/json',
     'authorization': authHeader || '',
     'x-api-provider': provider,
     'x-factory-client': 'cli',
+    'x-client-version': getClientVersion(),
+    'x-provider-routing-source': 'registry_default',
     'x-session-id': sessionId,
     'x-assistant-message-id': messageId,
     'user-agent': getUserAgent(),
     'connection': 'keep-alive'
   };
+
+  const orgId = getOrgId();
+  if (orgId) {
+    headers['x-factory-org-id'] = orgId;
+  }
+
+  const openAiPlatform = getOpenAiPlatform();
+  if (openAiPlatform) {
+    headers['openai-platform'] = openAiPlatform;
+  }
 
   // Pass through Stainless SDK headers with defaults
   const stainlessDefaults = {
@@ -163,8 +177,8 @@ export function getOpenAIHeaders(authHeader, clientHeaders = {}, provider = 'ope
     'x-stainless-os': 'MacOS',
     'x-stainless-runtime': 'node',
     'x-stainless-retry-count': '0',
-    'x-stainless-package-version': '5.23.2',
-    'x-stainless-runtime-version': 'v24.3.0'
+    'x-stainless-package-version': '6.25.0',
+    'x-stainless-runtime-version': 'v26.3.0'
   };
 
   // Copy Stainless headers from client or use defaults
