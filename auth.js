@@ -172,6 +172,25 @@ function saveV2Tokens(accessToken, refreshToken) {
 }
 
 /**
+ * Factory-side organization id carried in the access token, used for the
+ * x-factory-org-id upstream header.
+ *
+ * The WorkOS refresh response also returns an `organization_id`, but that is
+ * WorkOS' own organization record id. The Factory gateway does not know it, so
+ * never promote it to the active organization.
+ */
+function getTokenExternalOrgId(token) {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+    return typeof payload.external_org_id === 'string' && payload.external_org_id
+      ? payload.external_org_id
+      : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
  * Access token expiry (ms since epoch) parsed from a JWT, or null when unavailable.
  */
 function getTokenExpiryMs(token) {
@@ -198,9 +217,9 @@ function loadAuthConfig() {
     // Still pick up the active organization from the droid credential file when present,
     // so upstream calls carry x-factory-org-id.
     const v2 = loadV2Credentials();
-    if (v2?.active_organization_id) {
-      currentOrgId = v2.active_organization_id;
-    }
+    currentOrgId = (v2?.access_token ? getTokenExternalOrgId(v2.access_token) : null)
+      || v2?.active_organization_id
+      || null;
 
     return { type: 'factory_key', value: factoryKey.trim() };
   }
@@ -217,9 +236,9 @@ function loadAuthConfig() {
   // 3. Check the current droid credential storage (~/.factory/auth.v2.loginkeychain)
   const v2 = loadV2Credentials();
   if (v2) {
-    if (v2.active_organization_id) {
-      currentOrgId = v2.active_organization_id;
-    }
+    currentOrgId = (v2.access_token ? getTokenExternalOrgId(v2.access_token) : null)
+      || v2.active_organization_id
+      || null;
 
     if (v2.refresh_token) {
       logInfo('Using credentials from ~/.factory/auth.v2.loginkeychain');
@@ -330,11 +349,14 @@ async function refreshApiKey() {
     if (data.user) {
       logInfo(`Authenticated as: ${data.user.email} (${data.user.first_name} ${data.user.last_name})`);
       logInfo(`User ID: ${data.user.id}`);
-      logInfo(`Organization ID: ${data.organization_id}`);
     }
 
-    if (data.organization_id) {
-      currentOrgId = data.organization_id;
+    // Only the token's external_org_id is usable upstream; the WorkOS
+    // organization_id is a different identifier the Factory gateway rejects.
+    const externalOrgId = getTokenExternalOrgId(data.access_token);
+    if (externalOrgId) {
+      currentOrgId = externalOrgId;
+      logInfo(`Factory organization ID: ${externalOrgId}`);
     }
 
     // Save tokens back to the storage they came from
@@ -452,7 +474,7 @@ export async function initializeAuth() {
  * Active Factory organization id, used for the x-factory-org-id upstream header.
  */
 export function getOrgId() {
-  return currentOrgId || process.env.FACTORY_ORG_ID || null;
+  return process.env.FACTORY_ORG_ID || currentOrgId || null;
 }
 
 /**
