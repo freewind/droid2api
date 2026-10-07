@@ -118,9 +118,8 @@ app.use((err, req, res, next) => {
     // Initialize User-Agent version updater
     initializeUserAgentUpdater();
     
-    // Initialize auth system (load and setup API key if needed)
-    // This won't throw error if no auth config is found - will use client auth
-    await initializeAuth();
+    // Initialize auth system (validates the required FACTORY_API_KEY)
+    initializeAuth();
     
     const PORT = getPort();
   logInfo(`Starting server on port ${PORT}...`);

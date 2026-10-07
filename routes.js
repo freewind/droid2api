@@ -300,17 +300,7 @@ async function handleChatCompletions(req, res) {
 
     logInfo(`Routing to ${model.type} endpoint: ${endpoint.base_url}`);
 
-    // Get API key (will auto-refresh if needed)
-    let authHeader;
-    try {
-      authHeader = await getApiKey(req.headers.authorization);
-    } catch (error) {
-      logError('Failed to get API key', error);
-      return res.status(500).json({ 
-        error: 'API key not available',
-        message: 'Failed to get or refresh API key. Please check server logs.'
-      });
-    }
+    const authHeader = getApiKey();
 
     let transformedRequest;
     let headers;
@@ -499,20 +489,7 @@ async function handleDirectResponses(req, res) {
 
     logInfo(`Direct forwarding to ${model.type} endpoint: ${endpoint.base_url}`);
 
-    // Get API key - support client x-api-key for anthropic endpoint
-    let authHeader;
-    try {
-      const clientAuthFromXApiKey = req.headers['x-api-key']
-        ? `Bearer ${req.headers['x-api-key']}`
-        : null;
-      authHeader = await getApiKey(req.headers.authorization || clientAuthFromXApiKey);
-    } catch (error) {
-      logError('Failed to get API key', error);
-      return res.status(500).json({ 
-        error: 'API key not available',
-        message: 'Failed to get or refresh API key. Please check server logs.'
-      });
-    }
+    const authHeader = getApiKey();
 
     const clientHeaders = req.headers;
     
@@ -644,20 +621,7 @@ async function handleDirectMessages(req, res) {
 
     logInfo(`Direct forwarding to ${model.type} endpoint: ${endpoint.base_url}`);
 
-    // Get API key - support client x-api-key for anthropic endpoint
-    let authHeader;
-    try {
-      const clientAuthFromXApiKey = req.headers['x-api-key']
-        ? `Bearer ${req.headers['x-api-key']}`
-        : null;
-      authHeader = await getApiKey(req.headers.authorization || clientAuthFromXApiKey);
-    } catch (error) {
-      logError('Failed to get API key', error);
-      return res.status(500).json({ 
-        error: 'API key not available',
-        message: 'Failed to get or refresh API key. Please check server logs.'
-      });
-    }
+    const authHeader = getApiKey();
 
     const clientHeaders = req.headers;
     
@@ -798,20 +762,7 @@ async function handleCountTokens(req, res) {
       return res.status(500).json({ error: 'Endpoint type anthropic not found' });
     }
 
-    // Get API key
-    let authHeader;
-    try {
-      const clientAuthFromXApiKey = req.headers['x-api-key']
-        ? `Bearer ${req.headers['x-api-key']}`
-        : null;
-      authHeader = await getApiKey(req.headers.authorization || clientAuthFromXApiKey);
-    } catch (error) {
-      logError('Failed to get API key', error);
-      return res.status(500).json({
-        error: 'API key not available',
-        message: 'Failed to get or refresh API key. Please check server logs.'
-      });
-    }
+    const authHeader = getApiKey();
 
     const clientHeaders = req.headers;
     
@@ -898,16 +849,7 @@ async function handleDirectGenerate(req, res) {
 
     logInfo(`Direct forwarding to ${model.type} endpoint: ${endpoint.base_url}`);
 
-    let authHeader;
-    try {
-      authHeader = await getApiKey(req.headers.authorization);
-    } catch (error) {
-      logError('Failed to get API key', error);
-      return res.status(500).json({
-        error: 'API key not available',
-        message: 'Failed to get or refresh API key. Please check server logs.'
-      });
-    }
+    const authHeader = getApiKey();
 
     const clientHeaders = req.headers;
 
