@@ -7,15 +7,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # 认证配置（按优先级选择其一）：
-      # 最高优先级：固定API密钥（推荐用于生产环境）
+      # 认证：静态 Factory API key（必填，永不过期）
       - FACTORY_API_KEY=${FACTORY_API_KEY}
-      # 次优先级：refresh token自动刷新机制
-      - DROID_REFRESH_KEY=${DROID_REFRESH_KEY}
-      # 可选：如果需要修改端口，在config.json中配置
-    volumes:
-      # 可选：持久化auth.json以保存刷新的tokens
-      - ./data:/app/data
+      # 可选：上游 x-factory-org-id 使用的 Factory 侧组织 ID
+      - FACTORY_ORG_ID=${FACTORY_ORG_ID}
+      # 如需修改端口，在config.json中配置
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]

@@ -6,12 +6,10 @@ OpenAI 兼容的 API 代理服务器，统一访问不同的 LLM 模型。
 
 ## 核心功能
 
-### 🔐 双重授权机制
-- **FACTORY_API_KEY优先级** - 环境变量设置固定API密钥，跳过自动刷新
-- **令牌自动刷新** - WorkOS OAuth集成，系统每6小时自动刷新access_token
-- **客户端授权回退** - 无配置时使用客户端请求头的authorization字段
-- **智能优先级** - FACTORY_API_KEY > refresh_token > 客户端authorization
-- **容错启动** - 无任何认证配置时不报错，继续运行支持客户端授权
+### 🔐 静态 API Key 认证
+- **FACTORY_API_KEY** - 环境变量设置固定 API 密钥（必需），永不过期、无需刷新
+- **FACTORY_ORG_ID** - 可选，上游 `x-factory-org-id` 头使用的 Factory 侧组织 ID
+- **明确失败** - 未设置 `FACTORY_API_KEY` 时启动直接报错退出
 
 ### 🧠 智能推理级别控制
 - **五档推理级别** - auto/off/low/medium/high，灵活控制推理行为
@@ -72,32 +70,20 @@ npm install
 
 ## 快速开始
 
-### 1. 配置认证（四种方式）
+### 1. 配置认证（静态 API Key）
 
-**优先级：FACTORY_API_KEY > DROID_REFRESH_KEY > 本地 droid 登录态 > 客户端authorization**
+**必填：`FACTORY_API_KEY`；可选：`FACTORY_ORG_ID`**
 
 ```bash
-# 方式1：固定API密钥（最高优先级）
+# 必填：Factory API 密钥（fk- 开头），永不过期
 export FACTORY_API_KEY="your_factory_api_key_here"
 
-# 方式2：自动刷新令牌（DROID_REFRESH_KEY 环境变量）
-export DROID_REFRESH_KEY="your_refresh_token_here"
-
-# 方式3：直接复用本机 droid CLI 的登录态（无需任何配置）
-# 自动读取 ~/.factory/auth.v2.loginkeychain（AES-256-GCM 加密），
-# 密钥取自 macOS Keychain（服务 "Factory CLI"，账号
-# "auth-encryption-key-security-cli"/"auth-encryption-key"）。
-# 旧版存储 ~/.factory/auth.json 仍作为兜底。
+# 可选：上游 x-factory-org-id 使用的 Factory 侧组织 ID
+export FACTORY_ORG_ID="your_factory_org_id"
 ```
 
-- 方式3 只使用本机已有的登录状态，access_token 未接近过期时不会发起刷新请求。
-- 刷新发生时会按原格式写回 droid 的凭证文件，droid CLI 的登录态不受影响。
-- 组织 ID 会自动从登录态带出，用于上游 `x-factory-org-id` 头；也可用环境变量 `FACTORY_ORG_ID` 覆盖。
-
-```bash
-# 方式4：无配置（客户端授权）
-# 服务器将使用客户端请求头中的authorization字段
-```
+- 未设置 `FACTORY_API_KEY` 时服务器启动即报错退出。
+- `FACTORY_ORG_ID` 缺省时不发送 `x-factory-org-id` 头。
 
 ### 2. 配置模型（可选）
 
@@ -257,7 +243,8 @@ docker build -t droid2api .
 # 运行容器
 docker run -d \
   -p 3000:3000 \
-  -e DROID_REFRESH_KEY="your_refresh_token" \
+  -e FACTORY_API_KEY="your_factory_api_key_here" \
+  -e FACTORY_ORG_ID="your_factory_org_id" \
   --name droid2api \
   droid2api
 ```
@@ -266,7 +253,8 @@ docker run -d \
 
 Docker部署支持以下环境变量：
 
-- `DROID_REFRESH_KEY` - 刷新令牌（必需）
+- `FACTORY_API_KEY` - Factory API 密钥（必需）
+- `FACTORY_ORG_ID` - Factory 侧组织 ID（可选，用于上游 `x-factory-org-id` 头）
 - `PORT` - 服务端口（默认3000）
 - `NODE_ENV` - 运行环境（production/development）
 
@@ -359,28 +347,19 @@ curl http://localhost:3000/v1/chat/completions \
 
 ### 如何配置授权机制？
 
-droid2api支持三级授权优先级：
+只需设置静态 API 密钥：
 
-1. **FACTORY_API_KEY**（最高优先级）
-   ```bash
-   export FACTORY_API_KEY="your_api_key"
-   ```
-   使用固定API密钥，停用自动刷新机制。
+```bash
+export FACTORY_API_KEY="your_factory_api_key_here"
+```
 
-2. **refresh_token机制**
-   ```bash
-   export DROID_REFRESH_KEY="your_refresh_token"
-   ```
-   自动刷新令牌，每6小时更新一次。
+- 固定密钥永不过期，无刷新机制。
+- 可选设置 `FACTORY_ORG_ID`，用于上游 `x-factory-org-id` 头；缺省时不发送该头。
+- 未设置密钥时服务器启动直接报错退出。
 
-3. **客户端授权**（fallback）
-   无需配置，直接使用客户端请求头的authorization字段。
+### 如何获取 Factory API Key？
 
-### 什么时候使用FACTORY_API_KEY？
-
-- **开发环境** - 使用固定密钥避免令牌过期问题
-- **CI/CD流水线** - 稳定的认证，不依赖刷新机制
-- **临时测试** - 快速设置，无需配置refresh_token
+在 Factory 控制台生成 `fk-` 开头的 API 密钥，通过环境变量注入（本地导出、launchd plist 或容器环境变量均可）。
 
 ### 如何控制流式和非流式响应？
 
@@ -446,17 +425,6 @@ droid2api完全尊重客户端的stream参数设置：
 | `medium` | 中度推理 (12288 tokens) | 平衡性能与质量 |
 | `high` | 深度推理 (24576 tokens) | 复杂任务 |
 
-### 令牌多久刷新一次？
-
-系统每6小时自动刷新一次访问令牌。刷新令牌有效期为8小时，确保有2小时的缓冲时间。
-
-### 如何检查令牌状态？
-
-查看服务器日志，成功刷新时会显示：
-```
-Token refreshed successfully, expires at: 2025-01-XX XX:XX:XX
-```
-
 ### Claude Code无法连接怎么办？
 
 1. 确保droid2api服务器正在运行：`curl http://localhost:3000/v1/models`
@@ -504,9 +472,9 @@ Token refreshed successfully, expires at: 2025-01-XX XX:XX:XX
 
 ### 认证失败
 
-确保已正确配置 refresh token：
-- 设置环境变量 `DROID_REFRESH_KEY`
-- 或创建 `~/.factory/auth.json` 文件
+确保已设置环境变量 `FACTORY_API_KEY`，查看启动日志确认初始化结果：
+- 密钥无效时，更新环境变量后重启服务
+- 上游返回 403 时，检查 `FACTORY_ORG_ID` 是否为 Factory 侧组织 ID
 
 ### 模型不可用
 
