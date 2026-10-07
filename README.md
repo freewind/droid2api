@@ -74,11 +74,22 @@ npm install
 
 **必填：`FACTORY_API_KEY`；可选：`FACTORY_ORG_ID`**
 
-```bash
-# 必填：Factory API 密钥（fk- 开头），永不过期
-export FACTORY_API_KEY="your_factory_api_key_here"
+方式一：项目根目录创建 `.env` 文件（参考 `.env.example`，已被 gitignore），服务启动时自动读取：
 
-# 可选：上游 x-factory-org-id 使用的 Factory 侧组织 ID
+```bash
+cp .env.example .env
+chmod 600 .env
+```
+
+```env
+FACTORY_API_KEY=your_factory_api_key_here
+FACTORY_ORG_ID=your_factory_org_id
+```
+
+方式二：环境变量（优先级高于 `.env`，已设置的项不会被 `.env` 覆盖）：
+
+```bash
+export FACTORY_API_KEY="your_factory_api_key_here"
 export FACTORY_ORG_ID="your_factory_org_id"
 ```
 
