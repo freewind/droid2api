@@ -71,14 +71,14 @@ export class OpenAIResponseTransformer {
       return null;
     }
 
-    if (eventType === 'response.done') {
+    if (eventType === 'response.done' || eventType === 'response.completed' || eventType === 'response.incomplete') {
       const status = eventData.response?.status;
       let finishReason = 'stop';
-      
-      if (this.hasToolCalls) {
-        finishReason = 'tool_calls';
-      } else if (status === 'incomplete') {
+
+      if (eventType === 'response.incomplete' || status === 'incomplete') {
         finishReason = 'length';
+      } else if (this.hasToolCalls) {
+        finishReason = 'tool_calls';
       }
 
       const finalChunk = this.createOpenAIChunk('', null, true, finishReason);
@@ -172,10 +172,6 @@ export class OpenAIResponseTransformer {
             }
           }
         }
-      }
-
-      if (currentEvent === 'response.done' || currentEvent === 'response.completed') {
-        yield this.createDoneSignal();
       }
     } catch (error) {
       logDebug('Error in OpenAI stream transformation', error);
